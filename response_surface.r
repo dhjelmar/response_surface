@@ -82,9 +82,11 @@ mysummary(model_cyl_hp_wt_cylxhp)                                               
 # FORWARD SELECTION (detailed steps not included)
 # instead when built model from simple to complex, ended with a different model
 # probably because I did not try every option each time when looking to expand by 1 more parameter.
-# THis highlights how reverse (i.e., above) process is more efficient.
-# Results in only 2 parameters in the model which is nicer but missing important other parameters.
-model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + wt:wt, data = mtcars)         # p=1.309E-12 best overall
+# This highlights how reverse (i.e., above) process is more efficient.
+# Results in only 2 parameters in the model which is nicer but potentially missing important other parameters.
+#model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + wt:wt, data = mtcars)       # supprisingly, this drops the wt:wt
+#model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt, wt:wt), data = mtcars)        # supprisingly, this drops the wt:wt
+model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + PQ(wt), data = mtcars)       # p=1.309E-12 best overall
 mysummary(model_hp_wt_wt2)
 #   mpg = b + c1 * hp + c2 * wt + c3 * wt^2
 #--------------------------------------------------------------------
@@ -100,10 +102,10 @@ if (export){
 
 # plot the model response against the 4 parameters
 plotspace(2,2)
-model = model_hp_wt_wt2
+model = model_cyl_hp_wt_cylxhp
 contour(
     model,                  # Our model
-    ~ hp + wt + wt:wt,        # A formula to obtain graphs of all 3 combinations 
+    ~ hp + wt + wt + cyl,      # A formula to obtain graphs of all 3 combinations 
     image = TRUE,           # If image = TRUE, apply color to each contour
 )
 
@@ -111,14 +113,7 @@ contour(
 plotspace(2,2)
 persp(
     model,            # Our model 
-    ~ hp + wt + wt:wt,        # A formula to obtain graphs of all 3 combinations 
-    col = topo.colors(100), # Color palette
-    contours = "colors"     # Include contours with the same color palette
-) 
-plotspace(1,1)
-persp(
-    model,            # Our model 
-    ~ hp + wt,        # A formula to obtain graphs of all 3 combinations 
+    ~ hp + wt + wt + cyl,        # A formula to obtain graphs of all 3 combinations 
     col = topo.colors(100), # Color palette
     contours = "colors"     # Include contours with the same color palette
 ) 
@@ -126,6 +121,8 @@ persp(
 #--------------------------------------------------------------------
 
 # best overall models
+
+# forward model
 mpg_hp_wt_wt2 <- function(hp, wt, model=model_hp_wt_wt2) {
     # coefficients
     intercept <- coef(model)[[1]]
@@ -133,8 +130,12 @@ mpg_hp_wt_wt2 <- function(hp, wt, model=model_hp_wt_wt2) {
     c2 <- coef(model)[[3]]
     c3 <- coef(model)[[4]]
     # fit
-    mpg <- intercept + c1 * hp + c2 * wt + c3 * wt^2
+    mpg <- intercept + c1 * hp + c2 * wt + c3 * wt * wt
+    return(mpg)
 }
+
+mpg_hp_wt_wt2(100,3)
+# reverse model
 mpg_cyl_hp_wt_cylxhp <- function(cyl, hp, wt, model=model_cyl_hp_wt_cylxhp) {
     # coefficients
     intercept <- coef(model)[[1]]
@@ -144,24 +145,63 @@ mpg_cyl_hp_wt_cylxhp <- function(cyl, hp, wt, model=model_cyl_hp_wt_cylxhp) {
     c4 <- coef(model)[[5]]
     # fit
     mpg <- intercept + c1 * cyl + c2 * hp + c3 * wt + c4 * cyl * hp
+    return(mpg)
 }
+mpg_cyl_hp_wt_cylxhp(6, 100,3)
+
+#--------------------------------------------------------------------
+
+# look at residuals
+plotspace(3,2)
+
+yrange <- with(data, range(pred_forward - mpg, pred_reverse - mpg))
+with(data, plotfit(cyl, pred_forward - mpg, interval='none', ylimspec=yrange,
+                   equation=FALSE,
+                   main='forward model: hp + wt + wt^2'))
+abline(h=0)
+with(data, plotfit(cyl, pred_reverse - mpg, interval='none', ylimspec=yrange,
+                   equation=FALSE,
+                   main='reverse model: cyl + hp + wt + cyl*hp'))
+abline(h=0)
+
+yrange <- with(data, range(pred_forward - mpg, pred_reverse - mpg))
+with(data, plotfit(hp, pred_forward - mpg, interval='none', ylimspec=yrange,
+                   equation=FALSE,
+                   main='forward model: hp + wt + wt^2'))
+abline(h=0)
+with(data, plotfit(hp, pred_reverse - mpg, interval='none', ylimspec=yrange,
+                   equation=FALSE,
+                   main='reverse model: cyl + hp + wt + cyl*hp'))
+abline(h=0)
+
+yrange <- with(data, range(pred_forward - mpg, pred_reverse - mpg))
+with(data, plotfit(wt, pred_forward - mpg, interval='none', ylimspec=yrange,
+                   equation=FALSE,
+                   main='forward model: hp + wt + wt^2'))
+abline(h=0)
+with(data, plotfit(wt, pred_reverse - mpg, interval='none', ylimspec=yrange,
+                   equation=FALSE,
+                   main='reverse model: cyl + hp + wt + cyl*hp'))
+abline(h=0)
+
+#--------------------------------------------------------------------
 
 # interactive 3D plot with data for 1st model
 library(rgl)
 options(rgl.printRglwidget = TRUE) 
 # add points
 data <- mtcars
-with(data, rgl::plot3d(x=hp, y=wt, z=mpg, col='red', size='5', main='model: hp + wt + wt^2'))
-# Create a 3D surface plot 
+with(data, rgl::plot3d(x=hp, y=wt, z=mpg, col='red', size='5'))
+# Add 3D surface plot 
 x <- seq(min(data$hp), max(data$hp), length.out = 100)
 y <- seq(min(data$wt), max(data$wt), length.out = 100)
 z <- outer(x, y, function(x, y) mpg_hp_wt_wt2(x, y)) 
-persp3d(x, y, z, col = "blue", alpha=0.5, add=TRUE) 
+rgl::persp3d(x, y, z, col = "blue", alpha=0.5, add=TRUE) 
 
 # the following shows the points from this model which fall exactly on the surface
 # since there are only these 2 parameters in the model
-data$pred <- mpg_hp_wt_wt2(data$hp, data$wt)
-rgl::plot3d(data$hp, data$wt, data$pred, col='blue', size=8, add=TRUE)
+data$pred_forward <- mpg_hp_wt_wt2(data$hp, data$wt)
+rgl::plot3d(data$hp, data$wt, data$pred_forward, col='blue', size=8, add=TRUE)
 
 # add the other model
 #z <- outer(x, y, function(x, y) mpg_cyl_hp_wt_cylxhp(cyl=4, x, y)) 
@@ -171,5 +211,14 @@ rgl::plot3d(data$hp, data$wt, data$pred, col='blue', size=8, add=TRUE)
 
 # 2nd model looks bad because some data do not have cyl=4
 # Instead plot predictions from higher order model
-data$pred <- mpg_cyl_hp_wt_cylxhp(data$cyl, data$hp, data$wt)
-rgl::plot3d(data$hp, data$wt, data$pred, col='green', size=8, add=TRUE)
+data$pred_reverse <- mpg_cyl_hp_wt_cylxhp(data$cyl, data$hp, data$wt)
+rgl::plot3d(data$hp, data$wt, data$pred_reverse, col='green', size=8, add=TRUE)
+
+# add legend
+legend3d("topright", 
+         pch = 16, cex=0.8,
+         legend = c('data', 'mpg_hp_wt_wt2', 'mpg_cyl_hp_wt_cylxhp'), 
+         col = c('red', 'blue', 'green'))
+
+# capture snapshot
+# snapshot3d(filename = '3dplot.png', fmt = 'png')
