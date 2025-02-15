@@ -1,6 +1,8 @@
 # https://www.r-bloggers.com/2022/06/response-surface-designs-and-their-analysis-with-r/
 
-source('/home/david/Documents/GitHub/R-setup/setup.r')
+#source('~/Documents/GitHub/R-setup/setup.r')
+library(rsm)
+source('~/Documents/GitHub/R-setup/modules/plotspace.r')
 
 head(mtcars)
 
@@ -27,6 +29,7 @@ mysummary <- function(modelobject) {
 
 # fit 2nd order models for mpg = f(cyl, disp...)
 model <- rsm(mpg ~ SO(cyl, disp, hp, wt), data = mtcars)
+# anova(model)        # does not separate parts withing FO(), TWI(), and PQ so not as useful as mysummary() with rms()
 mysummary(model)                                             # p=7.458507eE-7
 # if want to extract just the P value for hp
 #   mysummary(model)$coef['hp',4]
@@ -78,8 +81,10 @@ mysummary(model_cyl_hp_wt_cylxhp)                                               
 #--------------------------------------------------------------------
 # FORWARD SELECTION (detailed steps not included)
 # instead when built model from simple to complex, ended with a different model
-# only 2 parameters which is nicer but possibly missing important other parameters?
-model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt, wt2), data = mymtcars)         # p=1.309E-12 best overall
+# probably because I did not try every option each time when looking to expand by 1 more parameter.
+# THis highlights how reverse (i.e., above) process is more efficient.
+# Results in only 2 parameters in the model which is nicer but missing important other parameters.
+model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + wt:wt, data = mtcars)         # p=1.309E-12 best overall
 mysummary(model_hp_wt_wt2)
 #   mpg = b + c1 * hp + c2 * wt + c3 * wt^2
 #--------------------------------------------------------------------
@@ -98,7 +103,7 @@ plotspace(2,2)
 model = model_hp_wt_wt2
 contour(
     model,                  # Our model
-    ~ hp + wt + wt2,        # A formula to obtain graphs of all 3 combinations 
+    ~ hp + wt + wt:wt,        # A formula to obtain graphs of all 3 combinations 
     image = TRUE,           # If image = TRUE, apply color to each contour
 )
 
@@ -106,7 +111,7 @@ contour(
 plotspace(2,2)
 persp(
     model,            # Our model 
-    ~ hp + wt + wt2,        # A formula to obtain graphs of all 3 combinations 
+    ~ hp + wt + wt:wt,        # A formula to obtain graphs of all 3 combinations 
     col = topo.colors(100), # Color palette
     contours = "colors"     # Include contours with the same color palette
 ) 
