@@ -3,10 +3,16 @@
 #source('~/Documents/GitHub/R-setup/setup.r')
 library(rsm)
 source('~/Documents/GitHub/R-setup/modules/plotspace.r')
+source('~/Documents/GitHub/R-setup/modules/ggcorplot.r')
 
 head(mtcars)
 
-# first a couple functions
+# look at data
+data <- mtcars[,c('cyl', 'disp', 'hp', 'wt', 'mpg')]
+pairs(data)
+ggcorplot(data)
+
+# define a couple functions to help look at model results
 pvalue <- function (modelobject) {
     # returns pvalue of model object
     f <- summary(modelobject)$fstatistic
