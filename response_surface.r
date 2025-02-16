@@ -4,10 +4,12 @@
 library(rsm)
 source('~/Documents/GitHub/R-setup/modules/plotspace.r')
 source('~/Documents/GitHub/R-setup/modules/ggcorplot.r')
-
-head(mtcars)
+source('~/Documents/GitHub/R-setup/modules/plotfit.r')
+source('~/Documents/GitHub/R-setup/modules/addfit.r')
+source('~/Documents/GitHub/R-setup/modules/is.nothing.r')
 
 # look at data
+head(mtcars)
 data <- mtcars[,c('cyl', 'disp', 'hp', 'wt', 'mpg')]
 pairs(data)
 ggcorplot(data)
@@ -34,14 +36,14 @@ mysummary <- function(modelobject) {
 # SO() creates all terms in FO(), TWI(), and PQ().
 
 # fit 2nd order models for mpg = f(cyl, disp...)
-model <- rsm(mpg ~ SO(cyl, disp, hp, wt), data = mtcars)
+model <- rsm(mpg ~ SO(cyl, disp, hp, wt), data = data)
 # anova(model)        # does not separate parts withing FO(), TWI(), and PQ so not as useful as mysummary() with rms()
 mysummary(model)                                             # p=7.458507eE-7
 # if want to extract just the P value for hp
 #   mysummary(model)$coef['hp',4]
 
 # above is the same as
-model <- rsm(mpg ~ FO(cyl, disp, hp, wt) + TWI(cyl, disp, hp, wt) + PQ(cyl, disp, hp, wt), data = mtcars)
+model <- rsm(mpg ~ FO(cyl, disp, hp, wt) + TWI(cyl, disp, hp, wt) + PQ(cyl, disp, hp, wt), data = data)
 mysummary(model)                                             # p=7.458507eE-7
 
 # look at P-value for the model and Pr for each parameter
@@ -56,31 +58,32 @@ mysummary(model)                                             # p=7.458507eE-7
 # Exception: Keep a primary parameter even if PR > 0.05 if it is needed in a combination.
 
 # drop disp
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp, wt), data = mtcars)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp, wt), data = data)
 mysummary(model)                                                                          # 6E-9
 
 # drop hp^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, wt), data = mtcars)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, wt), data = data)
 mysummary(model)                                                                          # 6E-9
 
 # drop wt^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp), data = mtcars)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp), data = data)
 mysummary(model)                                                                          # 1.16E-9
 
 # drop hp^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl), data = mtcars)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl), data = data)
 mysummary(model)                                                                          # 2E-10
 
 # drop hp:wt
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)) + PQ(cyl), data = mtcars)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)) + PQ(cyl), data = data)
+model <- lm(mpg ~ cyl + hp + wt + cyl:hp + cyl:wt + I(cyl*cyl), data = data)
 mysummary(model)                                                                          # 3.4E-11
 
 # drop cyl^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)), data = mtcars)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)), data = data)
 mysummary(model)                                                                          # 6.8E-12
 
 # drop cyl:wt
-model_cyl_hp_wt_cylxhp <- rsm(mpg ~ FO(cyl, hp, wt) + cyl:hp, data = mtcars)
+model_cyl_hp_wt_cylxhp <- rsm(mpg ~ FO(cyl, hp, wt) + cyl:hp, data = data)
 mysummary(model_cyl_hp_wt_cylxhp)                                                       # 5.07E-12
 #   mpg = b + c1 * cyl + c2 * hp + c3 * wt + c4 * cyl * hp
 
@@ -90,9 +93,10 @@ mysummary(model_cyl_hp_wt_cylxhp)                                               
 # probably because I did not try every option each time when looking to expand by 1 more parameter.
 # This highlights how reverse (i.e., above) process is more efficient.
 # Results in only 2 parameters in the model which is nicer but potentially missing important other parameters.
-#model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + wt:wt, data = mtcars)       # supprisingly, this drops the wt:wt
-#model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt, wt:wt), data = mtcars)        # supprisingly, this drops the wt:wt
-model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + PQ(wt), data = mtcars)       # p=1.309E-12 best overall
+# all of the following result in identical fits
+model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + I(wt*wt), data = data)
+model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + PQ(wt), data = data)       # p=1.309E-12 best overall
+model_hp_wt_wt2 <- lm(mpg ~ hp + wt + I(wt*wt), data = data)
 mysummary(model_hp_wt_wt2)
 #   mpg = b + c1 * hp + c2 * wt + c3 * wt^2
 #--------------------------------------------------------------------
@@ -111,7 +115,7 @@ plotspace(2,2)
 model = model_cyl_hp_wt_cylxhp
 contour(
     model,                  # Our model
-    ~ hp + wt + wt + cyl,      # A formula to obtain graphs of all 3 combinations 
+    ~ hp + wt + cyl,      # A formula to obtain graphs of all 3 combinations 
     image = TRUE,           # If image = TRUE, apply color to each contour
 )
 
@@ -157,6 +161,12 @@ mpg_cyl_hp_wt_cylxhp(6, 100,3)
 
 #--------------------------------------------------------------------
 
+# add redictions to data
+data$pred_forward <- mpg_hp_wt_wt2(data$hp, data$wt)
+data$pred_reverse <- mpg_cyl_hp_wt_cylxhp(data$cyl, data$hp, data$wt)
+
+#--------------------------------------------------------------------
+
 # look at residuals
 plotspace(3,2)
 
@@ -196,7 +206,6 @@ abline(h=0)
 library(rgl)
 options(rgl.printRglwidget = TRUE) 
 # add points
-data <- mtcars
 with(data, rgl::plot3d(x=hp, y=wt, z=mpg, col='red', size='5'))
 # Add 3D surface plot 
 x <- seq(min(data$hp), max(data$hp), length.out = 100)
@@ -206,7 +215,6 @@ rgl::persp3d(x, y, z, col = "blue", alpha=0.5, add=TRUE)
 
 # the following shows the points from this model which fall exactly on the surface
 # since there are only these 2 parameters in the model
-data$pred_forward <- mpg_hp_wt_wt2(data$hp, data$wt)
 rgl::plot3d(data$hp, data$wt, data$pred_forward, col='blue', size=8, add=TRUE)
 
 # add the other model
@@ -217,14 +225,14 @@ rgl::plot3d(data$hp, data$wt, data$pred_forward, col='blue', size=8, add=TRUE)
 
 # 2nd model looks bad because some data do not have cyl=4
 # Instead plot predictions from higher order model
-data$pred_reverse <- mpg_cyl_hp_wt_cylxhp(data$cyl, data$hp, data$wt)
 rgl::plot3d(data$hp, data$wt, data$pred_reverse, col='green', size=8, add=TRUE)
 
-# add legend
-legend3d("topright", 
-         pch = 16, cex=0.8,
-         legend = c('data', 'mpg_hp_wt_wt2', 'mpg_cyl_hp_wt_cylxhp'), 
-         col = c('red', 'blue', 'green'))
+# add legend  <-- legend is very fuzzy
+#legend3d("topright", 
+#         pch = 16, cex=0.8,
+#         legend = c('data', 'mpg_hp_wt_wt2', 'mpg_cyl_hp_wt_cylxhp'), 
+#         col = c('red', 'blue', 'green'))
 
 # capture snapshot
 # snapshot3d(filename = '3dplot.png', fmt = 'png')
+
