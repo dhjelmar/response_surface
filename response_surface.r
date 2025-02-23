@@ -8,8 +8,7 @@ source('~/Documents/GitHub/R-setup/modules/mypairs.r')
 source('~/Documents/GitHub/R-setup/modules/plotfit.r')
 source('~/Documents/GitHub/R-setup/modules/addfit.r')
 source('~/Documents/GitHub/R-setup/modules/is.nothing.r')
-source('~/Documents/GitHub/R-setup/modules/scaledf.r')
-source('~/Documents/GitHub/R-setup/modules/unscaledf.r')
+source('~/Documents/GitHub/R-setup/modules/standardize.r')
 r_files <- list.files('~/Documents/GitHub/response_surface/modules', pattern="*.[rR]$", full.names=TRUE)
 for (f in r_files) {
   ## cat("f =",f,"\n")
@@ -26,8 +25,10 @@ mypairs(data)
 ######################################################################
 # scale data
 df <- data
-out_scale <- scaledf(data)
-dfs <- out_scale$dfs
+out_std <- standardize(data)
+dfs <- out_std$dfs
+out_std$meanvec
+out_std$sdvec
 mypairs(dfs)
 
 ######################################################################
@@ -37,6 +38,9 @@ set.seed(1)
 sample <- sample(c(TRUE, FALSE), nrow(df), replace=TRUE, prob=c(0.7,0.3))
 train  <- df[sample, ]
 test   <- df[!sample, ]
+# all data
+df[ sample,'type'] <- 'train'
+df[!sample,'type'] <- 'test'
 # scaled
 trains  <- dfs[sample, ]
 tests   <- dfs[!sample, ]
@@ -51,12 +55,69 @@ tests   <- dfs[!sample, ]
 #x <- data.matrix(df[, c('cyl', 'disp', 'hp', 'wt')])
 
 plotspace(3,2)
-out <- lasso(train, yvar='mpg', alpha=1, lambda='best', plot_mse=TRUE, plot_resid=TRUE)
+yvar <- 'mpg'
+# regular
+#train_out <- lasso(train, yvar=yvar, alpha=1, lambda='best', plot_mse=TRUE, plot_resid=TRUE)
+# standardized
+train_out <- lasso(trains, yvar=yvar, alpha=1, lambda='best', plot_mse=TRUE, plot_resid=TRUE)
+train_out$coef
+train_results <- train_out$results
+b    <- train_out$coef[[1]]
+coef <- train_out$coef[2:length(coef)]
 
-plotspace(3,2)
-out <- lasso(train, yvar='mpg', alpha=1, lambda='best', plot_mse=TRUE, plot_resid=TRUE)
+used_standardized <- TRUE
+if (used_standardized) {
+    # need to overwrite b and coef
+    bs <- b
+    coefs <- coef
+    out <- standardize_rev(trains, out_std$meanvec, out_std$sdvec, coef_s=train_out$coef, y=yvar)
+    b <- out$b
+    coef <- out$coef
+}
+
+# how do predictions look on test data?
+typeloc <- which(names(df) == 'type')
+xnew <- df[-typeloc]
+yloc <- which(names(xnew) == yvar)
+xnew <- xnew[-yloc]
+LASSO <- b + as.matrix(xnew) %*% coef
+results <- cbind(df, LASSO)
+## plot residuals
+plotspace(2,2)
+train_results <- results[results$type == 'train',]
+test_results  <- results[results$type == 'test',]
+for (param in c(names(test[,-yloc]))) {
+    #with(results, plotfit(cyl, LASSO-param, interval='none', ylimspec=range(LASSO-mpg),
+    #                      equation=FALSE, main='LASSO scaled'))
+    #browser()
+    yrange <- range(train_results[,'LASSO'] - train_results[,yvar],
+                    test_results[,'LASSO'] - test_results[,yvar])
+    # plot training residuals
+    plotfit(xx = train_results[,param], 
+            yy = train_results[,'LASSO'] - train_results[,yvar],
+            xlabel = param,
+            ylabel = paste('LASSO - ', yvar, sep=''),
+            ylimspec = yrange,
+            interval='none', 
+            equation=FALSE, 
+            main='LASSO training data')
+    abline(h=0)
+    # plot test residuals
+    plotfit(xx = test_results[,param], 
+            yy = test_results[,'LASSO'] - test_results[,yvar],
+            xlabel = param,
+            ylabel = paste('LASSO - ', yvar, sep=''),
+            ylimspec = yrange,
+            interval='none', 
+            equation=FALSE, 
+            main='LASSO test data')
+    abline(h=0)
+}
 
 
+
+
+    
 
 ######################################################################
 # rsm package

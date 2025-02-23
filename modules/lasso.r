@@ -23,6 +23,9 @@ lasso <- function(df, yvar, alpha=1, lambda='best', plot_mse=TRUE, plot_resid=TR
     ##find coefficients of best model
     model <- glmnet(x, y, alpha = alpha, lambda = lambda)
     coef <- coef(model)
+    #browser()
+    coef <- as.vector(coef)
+    names(coef) <- c('(Intercept)', names(df[,-yloc]))
 
     ##use fitted best model to make predictions
     yfit <- predict(model, s = lambda, newx = x)
