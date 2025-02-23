@@ -1,34 +1,64 @@
 # https://www.r-bloggers.com/2022/06/response-surface-designs-and-their-analysis-with-r/
 
 #source('~/Documents/GitHub/R-setup/setup.r')
-library(rsm)
+library(glmnet)            # LASSO and Ridge Regression
+library(rsm)               # rsm wrapper on lm() regression
 source('~/Documents/GitHub/R-setup/modules/plotspace.r')
-source('~/Documents/GitHub/R-setup/modules/ggcorplot.r')
+source('~/Documents/GitHub/R-setup/modules/mypairs.r')
 source('~/Documents/GitHub/R-setup/modules/plotfit.r')
 source('~/Documents/GitHub/R-setup/modules/addfit.r')
 source('~/Documents/GitHub/R-setup/modules/is.nothing.r')
+source('~/Documents/GitHub/R-setup/modules/scaledf.r')
+source('~/Documents/GitHub/R-setup/modules/unscaledf.r')
+r_files <- list.files('~/Documents/GitHub/response_surface/modules', pattern="*.[rR]$", full.names=TRUE)
+for (f in r_files) {
+  ## cat("f =",f,"\n")
+  source(f)
+}
 
 # look at data
 head(mtcars)
 data <- mtcars[,c('cyl', 'disp', 'hp', 'wt', 'mpg')]
-pairs(data)
-ggcorplot(data)
+mypairs(data)
+#ggcorplot(data)
+#cor(data)
 
-# define a couple functions to help look at model results
-pvalue <- function (modelobject) {
-    # returns pvalue of model object
-    f <- summary(modelobject)$fstatistic
-    p <- pf(f[1],f[2],f[3],lower.tail=F)
-    attributes(p) <- NULL
-    return(p)
-}
-mysummary <- function(modelobject) {
-    # returns coefficients and pvalue of model object
-    coef <- summary(modelobject)$coefficients
-    pvalue <- pvalue(modelobject)
-    return(list(coef=coef, pvalue=pvalue))
-}
+######################################################################
+# scale data
+df <- data
+out_scale <- scaledf(data)
+dfs <- out_scale$dfs
+mypairs(dfs)
 
+######################################################################
+## separate data into training and test sets
+#use 70% of dataset as training set and 30% as test set
+set.seed(1)
+sample <- sample(c(TRUE, FALSE), nrow(df), replace=TRUE, prob=c(0.7,0.3))
+train  <- df[sample, ]
+test   <- df[!sample, ]
+# scaled
+trains  <- dfs[sample, ]
+tests   <- dfs[!sample, ]
+
+
+######################################################################
+# LASSO and Ridge Regression to get first cut at model
+# https://www.statology.org/lasso-regression-in-r/
+#y <- dfs$mpg
+#x <- data.matrix(dfs[, c('cyl', 'disp', 'hp', 'wt')])
+#y <- df$mpg
+#x <- data.matrix(df[, c('cyl', 'disp', 'hp', 'wt')])
+
+plotspace(3,2)
+out <- lasso(train, yvar='mpg', alpha=1, lambda='best', plot_mse=TRUE, plot_resid=TRUE)
+
+plotspace(3,2)
+out <- lasso(train, yvar='mpg', alpha=1, lambda='best', plot_mse=TRUE, plot_resid=TRUE)
+
+
+
+######################################################################
 # rsm package
 # Use FO() in the model formula in rsm to specify a first-order response surface (i.e., a linear function)
 # Use TWI() to generate two-way interactions.
@@ -36,14 +66,14 @@ mysummary <- function(modelobject) {
 # SO() creates all terms in FO(), TWI(), and PQ().
 
 # fit 2nd order models for mpg = f(cyl, disp...)
-model <- rsm(mpg ~ SO(cyl, disp, hp, wt), data = data)
+model <- rsm(mpg ~ SO(cyl, disp, hp, wt), data = dfs)
 # anova(model)        # does not separate parts withing FO(), TWI(), and PQ so not as useful as mysummary() with rms()
 mysummary(model)                                             # p=7.458507eE-7
 # if want to extract just the P value for hp
 #   mysummary(model)$coef['hp',4]
 
 # above is the same as
-model <- rsm(mpg ~ FO(cyl, disp, hp, wt) + TWI(cyl, disp, hp, wt) + PQ(cyl, disp, hp, wt), data = data)
+model <- rsm(mpg ~ FO(cyl, disp, hp, wt) + TWI(cyl, disp, hp, wt) + PQ(cyl, disp, hp, wt), data = dfs)
 mysummary(model)                                             # p=7.458507eE-7
 
 # look at P-value for the model and Pr for each parameter
@@ -58,32 +88,32 @@ mysummary(model)                                             # p=7.458507eE-7
 # Exception: Keep a primary parameter even if PR > 0.05 if it is needed in a combination.
 
 # drop disp
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp, wt), data = data)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp, wt), data = dfs)
 mysummary(model)                                                                          # 6E-9
 
 # drop hp^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, wt), data = data)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, wt), data = dfs)
 mysummary(model)                                                                          # 6E-9
 
 # drop wt^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp), data = data)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl, hp), data = dfs)
 mysummary(model)                                                                          # 1.16E-9
 
 # drop hp^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl), data = data)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(cyl, hp, wt) + PQ(cyl), data = dfs)
 mysummary(model)                                                                          # 2E-10
 
 # drop hp:wt
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)) + PQ(cyl), data = data)
-model <- lm(mpg ~ cyl + hp + wt + cyl:hp + cyl:wt + I(cyl*cyl), data = data)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)) + PQ(cyl), data = dfs)
+model <- lm(mpg ~ cyl + hp + wt + cyl:hp + cyl:wt + I(cyl*cyl), data = dfs)
 mysummary(model)                                                                          # 3.4E-11
 
 # drop cyl^2
-model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)), data = data)
+model <- rsm(mpg ~ FO(cyl, hp, wt) + TWI(formula = ~cyl:(hp+wt)), data = dfs)
 mysummary(model)                                                                          # 6.8E-12
 
 # drop cyl:wt
-model_cyl_hp_wt_cylxhp <- rsm(mpg ~ FO(cyl, hp, wt) + cyl:hp, data = data)
+model_cyl_hp_wt_cylxhp <- rsm(mpg ~ FO(cyl, hp, wt) + cyl:hp, data = dfs)
 mysummary(model_cyl_hp_wt_cylxhp)                                                       # 5.07E-12
 #   mpg = b + c1 * cyl + c2 * hp + c3 * wt + c4 * cyl * hp
 
@@ -94,12 +124,25 @@ mysummary(model_cyl_hp_wt_cylxhp)                                               
 # This highlights how reverse (i.e., above) process is more efficient.
 # Results in only 2 parameters in the model which is nicer but potentially missing important other parameters.
 # all of the following result in identical fits
-model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + I(wt*wt), data = data)
-model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + PQ(wt), data = data)       # p=1.309E-12 best overall
-model_hp_wt_wt2 <- lm(mpg ~ hp + wt + I(wt*wt), data = data)
+model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + I(wt*wt), data = dfs)
+model_hp_wt_wt2 <- rsm(mpg ~ FO(hp, wt) + PQ(wt), data = dfs)       # p=1.309E-12 best overall
+model_hp_wt_wt2 <- lm(mpg ~ hp + wt + I(wt*wt), data = dfs)
 mysummary(model_hp_wt_wt2)
 #   mpg = b + c1 * hp + c2 * wt + c3 * wt^2
 #--------------------------------------------------------------------
+
+######################################################################
+# unscale model results
+
+
+
+
+
+
+
+
+
+######################################################################
 
 # send summary results to txt file
 export = FALSE
@@ -110,12 +153,13 @@ if (export){
     )
 }
 
+######################################################################
 # plot the model response against the 4 parameters
 plotspace(2,2)
 model = model_cyl_hp_wt_cylxhp
 contour(
     model,                  # Our model
-    ~ hp + wt + cyl,      # A formula to obtain graphs of all 3 combinations 
+    ~ hp + wt + cyl,        # A formula to obtain graphs of all 3 combinations 
     image = TRUE,           # If image = TRUE, apply color to each contour
 )
 
